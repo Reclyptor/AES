@@ -75,16 +75,24 @@ public class Tests {
 				(byte)0x31, (byte)0x31, (byte)0x98, (byte)0xA2,
 				(byte)0xE0, (byte)0x37, (byte)0x07, (byte)0x34
 		};
-
+		
 		byte[] output = new byte[]{
+				(byte)0x19, (byte)0x3D, (byte)0xE3, (byte)0xBE, 
+				(byte)0xA0, (byte)0xF4, (byte)0xC6, (byte)0xF8, 
+				(byte)0x9A, (byte)0xC6, (byte)0x8D, (byte)0x2A,
+				(byte)0xE9, (byte)0xF8, (byte)0x48, (byte)0x08
+		};
+		
+		aes.KeyExpansion(new byte[]{
 				(byte)0x2B, (byte)0x7E, (byte)0x15, (byte)0x16, 
 				(byte)0x28, (byte)0xAE, (byte)0xD2, (byte)0xA6, 
 				(byte)0xAB, (byte)0xF7, (byte)0x15, (byte)0x88,
 				(byte)0x09, (byte)0xCF, (byte)0x4F, (byte)0x3C
-		};
+		});
 		
-		aes.AddRoundKey(input);
-		assertEquals(input, output);
+		aes.AddRoundKey(input, 0);
+		for (int i=0; i<16; i++)
+			assertEquals(input[i], output[i]);
 	}
 
 	@Test

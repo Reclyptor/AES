@@ -42,17 +42,17 @@ public class AES {
 		(byte)0xA0, (byte)0xE0, (byte)0x3B, (byte)0x4D, (byte)0xAE, (byte)0x2A, (byte)0xF5, (byte)0xB0, (byte)0xC8, (byte)0xEB, (byte)0xBB, (byte)0x3C, (byte)0x83, (byte)0x53, (byte)0x99, (byte)0x61,
 		(byte)0x17, (byte)0x2B, (byte)0x04, (byte)0x7E, (byte)0xBA, (byte)0x77, (byte)0xD6, (byte)0x26, (byte)0xE1, (byte)0x69, (byte)0x14, (byte)0x63, (byte)0x55, (byte)0x21, (byte)0x0C, (byte)0x7D};
 	private static final byte[] Rcon = new byte[]{
-		(byte)0x8d, (byte)0x01, (byte)0x02, (byte)0x04, (byte)0x08, (byte)0x10, (byte)0x20, (byte)0x40};
+		(byte)0x8D, (byte)0x01, (byte)0x02, (byte)0x04, (byte)0x08, (byte)0x10, (byte)0x20, (byte)0x40, (byte)0x80, (byte)0x1B, (byte)0x36};
 
 	// FIELDS //
-	int Nb;   // Number of 32-bit words (rows) comprising the State.
-	int Nk;   // Number of 32-bit words (rows) comprising the Cipher Key.
+	int Nb;   // Number of 32-bit words (columns) comprising the State.
+	int Nk;   // Number of 32-bit words (columns) comprising the Cipher Key.
 	int Nr;   // Number of rounds 
 	byte[] K; // The Cipher Key
+	byte[] W; // The Expanded Key
 
 	// CONSTRUCTORS //
 	public AES(int strength, BufferedInputStream bis, BufferedOutputStream bos) {
-		this.Nb = 4;
 		switch (strength) {
 		case 128:
 			this.Nk = 4;
@@ -70,12 +70,49 @@ public class AES {
 			this.Nk = 4;
 			this.Nr = 10;
 			break;
-		}	
+		}
+		this.Nb = 4;
+		this.K = new byte[4*Nk];
+		this.W = new byte[4*Nb*(Nr+1)];
 	}
 
 	// PRIVATE METHODS //
-	public void AddRoundKey(byte[] state) {
+	public void KeyExpansion(byte[] cipherkey) {
+		 byte[] temp = new byte[4];
+		 int i = 0;
+		 for (; i<4*Nk; i++)
+			 W[i] = cipherkey[i];
+		 i = Nk;
+		 while (i < Nb*(Nr+1)) {
+			 temp[0] = W[4*(i-1)    ];
+			 temp[1] = W[4*(i-1) + 1];
+			 temp[2] = W[4*(i-1) + 2];
+			 temp[3] = W[4*(i-1) + 3];
+			 if (i % Nk == 0)
+				 temp = SubWord(XORWord(RotWord(temp), new byte[]{Rcon[i/Nk],(byte)0x00,(byte)0x00,(byte)0x00}));
+			 else if (Nk > 6 && i % Nk == 4)
+				 temp = SubWord(temp);
+			 W[4*i    ] = (byte) (W[4*(i-Nk)    ] ^ temp[0]);
+			 W[4*i + 1] = (byte) (W[4*(i-Nk) + 1] ^ temp[1]);
+			 W[4*i + 2] = (byte) (W[4*(i-Nk) + 2] ^ temp[2]);
+			 W[4*i + 3] = (byte) (W[4*(i-Nk) + 3] ^ temp[3]);
+			 i+=1;
+		 }
+		 
+		 for (int j=0; j<4*Nb*(Nr+1); j++) {
+			 System.out.print(String.format(" %1$02X", W[j]));
+			 if (j > 0 && j % 16 == 15)
+				 System.out.println();
+		 }
+	}
 
+	public void AddRoundKey(byte[] state, int round) {
+		for (int i=0; i<Nb; i++) {
+			state[4*i    ] = W[round*4*Nb + (4*i    )];
+			state[4*i + 1] = W[round*4*Nb + (4*i + 1)];
+			state[4*i + 2] = W[round*4*Nb + (4*i + 2)];
+			state[4*i + 3] = W[round*4*Nb + (4*i + 3)];
+		}
 	}
 
 	public void SubBytes(byte[] state, boolean inverse) {
@@ -91,13 +128,23 @@ public class AES {
 
 	public void MixColumns(byte[] state, boolean inverse) {
 		byte[] temp = new byte[4];
-		for (int col=0; col<Nb; col++) {
-			temp[0] = (byte) (FFMult((byte)0x02, state[    4*col]) ^ FFMult((byte)0x03, state[1 + 4*col]) ^ state[2 + 4*col] ^ state[3 + 4*col]);
-			temp[1] = (byte) (FFMult((byte)0x02, state[1 + 4*col]) ^ FFMult((byte)0x03, state[2 + 4*col]) ^ state[    4*col] ^ state[3 + 4*col]);
-			temp[2] = (byte) (FFMult((byte)0x02, state[2 + 4*col]) ^ FFMult((byte)0x03, state[3 + 4*col]) ^ state[    4*col] ^ state[1 + 4*col]);
-			temp[3] = (byte) (FFMult((byte)0x03, state[    4*col]) ^ FFMult((byte)0x02, state[3 + 4*col]) ^ state[1 + 4*col] ^ state[2 + 4*col]);
-			for (int i=0; i<4; i++)
-				state[i + 4*col] = temp[i];
+		if (inverse) {
+			for (int col=0; col<Nb; col++) {
+				temp[0] = (byte) (FFMult((byte)0x02, state[    4*col]) ^ FFMult((byte)0x03, state[1 + 4*col]) ^ FFMult((byte)0x04, state[2 + 4*col]) ^ FFMult((byte)0x05, state[3 + 4*col]));
+				temp[1] = (byte) (FFMult((byte)0x05, state[    4*col]) ^ FFMult((byte)0x02, state[1 + 4*col]) ^ FFMult((byte)0x03, state[2 + 4*col]) ^ FFMult((byte)0x04, state[3 + 4*col]));
+				temp[2] = (byte) (FFMult((byte)0x04, state[    4*col]) ^ FFMult((byte)0x05, state[1 + 4*col]) ^ FFMult((byte)0x02, state[2 + 4*col]) ^ FFMult((byte)0x03, state[3 + 4*col]));
+				temp[3] = (byte) (FFMult((byte)0x03, state[    4*col]) ^ FFMult((byte)0x04, state[1 + 4*col]) ^ FFMult((byte)0x05, state[2 + 4*col]) ^ FFMult((byte)0x02, state[3 + 4*col]));
+			}
+		}
+		else {
+			for (int col=0; col<Nb; col++) {
+				temp[0] = (byte) (FFMult((byte)0x02, state[    4*col]) ^ FFMult((byte)0x03, state[1 + 4*col]) ^ state[2 + 4*col] ^ state[3 + 4*col]);
+				temp[1] = (byte) (FFMult((byte)0x02, state[1 + 4*col]) ^ FFMult((byte)0x03, state[2 + 4*col]) ^ state[    4*col] ^ state[3 + 4*col]);
+				temp[2] = (byte) (FFMult((byte)0x02, state[2 + 4*col]) ^ FFMult((byte)0x03, state[3 + 4*col]) ^ state[    4*col] ^ state[1 + 4*col]);
+				temp[3] = (byte) (FFMult((byte)0x03, state[    4*col]) ^ FFMult((byte)0x02, state[3 + 4*col]) ^ state[1 + 4*col] ^ state[2 + 4*col]);
+				for (int i=0; i<4; i++)
+					state[i + 4*col] = temp[i];
+			}
 		}
 	}
 
@@ -116,6 +163,26 @@ public class AES {
 			a = (byte)((a & 0xFF) >> 1);
 		}
 		return r;
+	}
+	
+	private byte[] RotWord(byte[] word) {
+		byte[] shifted = new byte[4];
+		for (int i=0; i<4; i++)
+			shifted[i] = word[(i+1)%4];
+		return shifted;
+	}
+	
+	private byte[] SubWord(byte[] word) {
+		for (int i=0; i<4; i++)
+			word[i] = Sbox[word[i] & 0xFF];
+		return word;
+	}
+	
+	private byte[] XORWord(byte[] w1, byte[] w2) {
+		byte[] xored = new byte[4];
+		for (int i=0; i<4; i++)
+			xored[i] = (byte) (w1[i] ^ w2[i]);
+		return xored;
 	}
 
 	// PUBLIC METHODS //
