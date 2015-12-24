@@ -78,40 +78,30 @@ public class AES {
 
 	// PRIVATE METHODS //
 	public void KeyExpansion(byte[] cipherkey) {
+		 System.arraycopy(cipherkey, 0, W, 0, 4*Nk);
 		 byte[] temp = new byte[4];
-		 int i = 0;
-		 for (; i<4*Nk; i++)
-			 W[i] = cipherkey[i];
-		 i = Nk;
+		 
+		 int i = Nk;
 		 while (i < Nb*(Nr+1)) {
-			 temp[0] = W[4*(i-1)    ];
-			 temp[1] = W[4*(i-1) + 1];
-			 temp[2] = W[4*(i-1) + 2];
-			 temp[3] = W[4*(i-1) + 3];
+			 System.arraycopy(W, 4*(i-1), temp, 0, temp.length);
 			 if (i % Nk == 0)
-				 temp = SubWord(XORWord(RotWord(temp), new byte[]{Rcon[i/Nk],(byte)0x00,(byte)0x00,(byte)0x00}));
+				 temp = XORWord(SubWord(RotWord(temp)), new byte[]{Rcon[i/Nk],(byte)0x00,(byte)0x00,(byte)0x00});
 			 else if (Nk > 6 && i % Nk == 4)
 				 temp = SubWord(temp);
 			 W[4*i    ] = (byte) (W[4*(i-Nk)    ] ^ temp[0]);
 			 W[4*i + 1] = (byte) (W[4*(i-Nk) + 1] ^ temp[1]);
 			 W[4*i + 2] = (byte) (W[4*(i-Nk) + 2] ^ temp[2]);
 			 W[4*i + 3] = (byte) (W[4*(i-Nk) + 3] ^ temp[3]);
-			 i+=1;
-		 }
-		 
-		 for (int j=0; j<4*Nb*(Nr+1); j++) {
-			 System.out.print(String.format(" %1$02X", W[j]));
-			 if (j > 0 && j % 16 == 15)
-				 System.out.println();
+			 i++;
 		 }
 	}
 
 	public void AddRoundKey(byte[] state, int round) {
 		for (int i=0; i<Nb; i++) {
-			state[4*i    ] = W[round*4*Nb + (4*i    )];
-			state[4*i + 1] = W[round*4*Nb + (4*i + 1)];
-			state[4*i + 2] = W[round*4*Nb + (4*i + 2)];
-			state[4*i + 3] = W[round*4*Nb + (4*i + 3)];
+			state[4*i    ] ^= W[round*4*Nb + (4*i    )];
+			state[4*i + 1] ^= W[round*4*Nb + (4*i + 1)];
+			state[4*i + 2] ^= W[round*4*Nb + (4*i + 2)];
+			state[4*i + 3] ^= W[round*4*Nb + (4*i + 3)];
 		}
 	}
 
